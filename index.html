@@ -1,0 +1,733 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Comprehension Test</title>
+<style>
+  :root {
+    --bg: rgb(235, 255, 235);
+    --bar: #ffffff;
+    --ink: #1f2a1f;
+    --muted: #5b6b5b;
+    --line: #c9dcc9;
+    --accent: rgb(208, 251, 255);
+    --accent-ink: #0b5560;
+    --pick: rgba(255, 196, 0, 0.35);
+    --pick-line: #e0a800;
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: "微軟正黑體", "Microsoft JhengHei", system-ui, sans-serif;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* 上方選單列（對應原本的 Setup 選單，現為「設定」） */
+  header {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 6px 12px;
+    background: var(--bar);
+    border-bottom: 1px solid var(--line);
+    font-size: 14px;
+  }
+  header .status { margin-left: auto; color: var(--muted); }
+  header .status b { color: var(--ink); }
+
+  button {
+    font: inherit;
+    font-weight: 700;
+    border: 1px solid var(--line);
+    background: #fff;
+    color: var(--ink);
+    border-radius: 6px;
+    padding: 6px 14px;
+    cursor: pointer;
+  }
+  button:hover { filter: brightness(0.96); }
+  button:focus-visible { outline: 3px solid var(--accent-ink); outline-offset: 2px; }
+
+  /* 題目圖片區 */
+  main {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 10px;
+  }
+  .stage { position: relative; display: inline-block; line-height: 0; }
+  /* 固定大小的顯示框，比例依題目圖檔規格 2752 × 1536（約 1.79 : 1），
+     圖片與四個作答按鈕都依此比例顯示，不會變形；大小不隨個別圖檔改變（同原程式 setScaledContents） */
+  .stage {
+    --pic-w: 2752;
+    --pic-h: 1536;
+    width: min(calc(100vw - 20px), calc((100vh - 150px) * var(--pic-w) / var(--pic-h)));
+    aspect-ratio: 2752 / 1536;
+    background: #fff;
+  }
+  .stage img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: fill;
+    user-select: none;
+    -webkit-user-drag: none;
+  }
+  /* 四個透明作答按鈕（對應 pushButton_1~4） */
+  .choices {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: 1fr 1fr;
+  }
+  .choices button {
+    border: 3px solid transparent;
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0);
+    padding: 0;
+  }
+  .choices button:hover { background: rgba(255, 255, 255, 0.18); }
+  .choices button.picked { background: var(--pick); border-color: var(--pick-line); }
+
+  .placeholder {
+    text-align: center;
+    line-height: 1.6;
+    font-size: 22px;
+    color: var(--muted);
+  }
+  .placeholder button { margin-top: 16px; font-size: 22px; padding: 10px 28px; background: var(--accent); }
+
+  /* 下方控制列（上一題 / 再聽一次 / 下一題） */
+  footer {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 16px 12px;
+  }
+  footer .big { font-size: 22px; padding: 12px 22px; min-width: 130px; }
+  #nextBtn { background: var(--accent); font-size: 26px; min-width: 260px; }
+  #listenBtn { margin-left: auto; }
+  .trial-no { font-size: 18px; color: var(--muted); }
+  .trial-no b { color: var(--ink); font-size: 22px; }
+  .audio-note { font-size: 16px; color: #b00020; font-weight: 700; }
+  #practiceBtn.active { background: #ffe9a8; border-color: var(--pick-line); }
+  button:disabled { opacity: 0.4; cursor: not-allowed; filter: none; }
+  /* 作答完成後提醒按「正確率」 */
+  #scoreBtn.remind { background: #ffe9a8; border-color: var(--pick-line); animation: remind 1s ease-in-out infinite alternate; }
+  @keyframes remind { from { box-shadow: 0 0 0 0 rgba(224, 168, 0, 0.7); } to { box-shadow: 0 0 0 6px rgba(224, 168, 0, 0); } }
+  .finish-big { font-size: 26px; font-weight: 700; color: var(--accent-ink); margin-bottom: 8px; }
+  body.practice main { background: #fff8e1; }
+
+  /* 對話框 */
+  dialog {
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 20px 22px;
+    min-width: 320px;
+    max-width: calc(100vw - 32px);
+  }
+  dialog::backdrop { background: rgba(0, 0, 0, 0.35); }
+  dialog h2 { margin: 0 0 12px; font-size: 18px; }
+  dialog label { display: block; margin: 10px 0 4px; font-size: 14px; color: var(--muted); }
+  dialog input {
+    width: 100%;
+    font: inherit;
+    font-size: 16px;
+    padding: 6px 8px;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+  }
+  .answer-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 15px; }
+  .answer-row span { flex: 1; min-width: 10em; }
+  .msg-body { white-space: pre-line; }
+  dialog .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+  dialog .primary { background: var(--accent); }
+  #logText {
+    width: min(520px, 80vw);
+    height: 50vh;
+    font-family: Consolas, monospace;
+    font-size: 14px;
+    white-space: pre;
+  }
+  .error { color: #b00020; font-size: 13px; min-height: 1em; margin-top: 6px; }
+
+  /* 正確率 */
+  .score-big { font-size: 40px; font-weight: 700; color: var(--accent-ink); margin: 4px 0 2px; }
+  .score-sub { font-size: 16px; color: var(--muted); }
+  .score-note { font-size: 13px; color: var(--muted); margin-top: 8px; }
+  #scoreText {
+    width: min(520px, 80vw);
+    height: 40vh;
+    margin-top: 12px;
+    font-family: Consolas, monospace;
+    font-size: 14px;
+    white-space: pre;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <button id="setupBtn" title="設定開始題號與受試者 ID">設定</button>
+  <button id="practiceBtn" title="練習題 Q1 ~ Q3（不列入作答紀錄）">練習題</button>
+  <button id="logBtn">檢視作答紀錄</button>
+  <button id="scoreBtn" title="依 answer.js 比對答案並計算正確率">正確率</button>
+  <span class="status">受試者 ID：<b id="idLabel">（未設定）</b> 資料檔：<b id="fileLabel">data.txt</b> 已作答：<b id="countLabel">0</b></span>
+</header>
+
+<main>
+  <div id="placeholder" class="placeholder">
+    請先從左上角 <b>設定</b> 輸入受試者 ID 與開始題號，<br>或直接按 <b>下一題</b> 從第 1 題開始。
+  </div>
+  <div id="stage" class="stage" hidden>
+    <img id="pic" alt="題目圖片">
+    <div class="choices">
+      <button data-choice="1" aria-label="選項 1"></button>
+      <button data-choice="2" aria-label="選項 2"></button>
+      <button data-choice="3" aria-label="選項 3"></button>
+      <button data-choice="4" aria-label="選項 4"></button>
+    </div>
+  </div>
+</main>
+
+<footer>
+  <button id="prevBtn" class="big">上一題</button>
+  <span class="trial-no"><span id="trialPrefix">題號</span> <b id="trialLabel">—</b> / <span id="endLabel"></span></span>
+  <span id="audioNote" class="audio-note" hidden>此題沒有音檔</span>
+  <button id="listenBtn" class="big">再聽一次</button>
+  <button id="nextBtn" class="big">下一題</button>
+</footer>
+
+<audio id="player" preload="auto"></audio>
+
+<!-- 設定開始題號與 ID（對應 TrialDialog） -->
+<dialog id="setupDlg">
+  <form id="setupForm" method="dialog">
+    <h2>設定開始題號與受試者 ID</h2>
+    <div>請輸入受試者 ID 與開始題號：</div>
+    <label for="idInput">受試者 ID</label>
+    <input id="idInput" autocomplete="off">
+    <label for="trialInput">開始題號</label>
+    <input id="trialInput" inputmode="numeric" autocomplete="off" value="1">
+    <label>答案檔（計算正確率用）</label>
+    <div class="answer-row">
+      <span id="answerLabel">answer.js（預設）</span>
+      <button type="button" id="answerPick">選擇答案檔</button>
+      <button type="button" id="answerReset" hidden>恢復預設</button>
+    </div>
+    <input type="file" id="answerFile" accept=".js,.csv,text/csv,text/javascript" hidden>
+    <div id="setupError" class="error"></div>
+    <div class="actions">
+      <button type="button" id="setupCancel">取消</button>
+      <button type="submit" class="primary">確定</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- 一般訊息（對應 QMessageBox） -->
+<dialog id="msgDlg">
+  <h2 id="msgTitle"></h2>
+  <div id="msgBody" class="msg-body"></div>
+  <div class="actions">
+    <button type="button" id="msgSave" hidden>下載資料檔</button>
+    <button type="button" class="primary" id="msgOk">確定</button>
+  </div>
+</dialog>
+
+<!-- 作答完成提醒 -->
+<dialog id="finishDlg">
+  <div class="finish-big">🎉 恭喜你，測驗已結束！</div>
+  <div class="msg-body">已完成最後一題（第 <span id="finishLast"></span> 題）。
+請按上方的「正確率」按鈕查看本次測驗結果。</div>
+  <div class="actions">
+    <button type="button" id="finishOk">確定</button>
+    <button type="button" class="primary" id="finishScore">查看正確率</button>
+  </div>
+</dialog>
+
+<!-- 作答紀錄 -->
+<dialog id="logDlg">
+  <h2>作答紀錄</h2>
+  <textarea id="logText" readonly></textarea>
+  <div class="actions">
+    <button type="button" id="logClear">清除此 ID 紀錄</button>
+    <button type="button" id="logSave">下載資料檔</button>
+    <button type="button" class="primary" id="logClose">關閉</button>
+  </div>
+</dialog>
+
+<!-- 正確率 -->
+<dialog id="scoreDlg">
+  <h2>正確率</h2>
+  <div id="scoreSummary"></div>
+  <textarea id="scoreText" readonly></textarea>
+  <div class="actions">
+    <button type="button" id="scoreSave">下載正確率報表</button>
+    <button type="button" class="primary" id="scoreClose">關閉</button>
+  </div>
+</dialog>
+
+<script>
+  // ---- 設定（與 pbtest.py 相同） ----
+  const PIC_DIR = 'pic';
+  const WAV_DIR = 'wav';
+  const DEFAULT_BEGIN = 0;    // 預設 begin_trial，按「下一題」後從第 1 題開始
+  const FIRST_TRIAL = 1;      // 題目圖片 1 ~ 36（.jpg 或 .png）
+  const END_TRIAL = 36;       // 最後一題：作答此題後跳出完成提醒並停用「下一題」（已改為 36 題）
+  const PRACTICE = ['Q1', 'Q2', 'Q3'];  // 練習題：pea_pic/Q1.jpg、pea_wav/Q1.wav …
+
+  const state = {
+    beginTrial: DEFAULT_BEGIN,
+    currentTrial: DEFAULT_BEGIN,
+    idNumber: '',
+    responses: [],            // [[trial, button, rtMs], ...]，與原程式相同會保留重複作答
+    shownAt: null,            // 目前題目出現的時間（performance.now()），用來算反應時間
+    practice: null,           // 練習中為 { index, picks }，練習作答不寫入資料檔
+    finishNotified: false     // 是否已跳出過「測驗已結束」提醒
+  };
+
+  const $ = (id) => document.getElementById(id);
+  const pic = $('pic'), player = $('player');
+  // 初始畫面的提示文字（依目前受試者 ID 與開始題號顯示）
+  function placeholderHtml() {
+    const start = state.beginTrial + 1;
+    const esc = (t) => t.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+    if (state.idNumber === '' && state.beginTrial === DEFAULT_BEGIN) {
+      return `請先從左上角 <b>設定</b> 輸入受試者 ID 與開始題號，<br>或直接按 <b>下一題</b> 從第 ${start} 題開始。`;
+    }
+    return `受試者 ID：<b>${esc(state.idNumber || '（未設定）')}</b><br>` +
+      `按 <b>練習題</b> 先做練習，或按 <b>下一題</b> 從第 ${start} 題開始測驗。`;
+  }
+
+  // ---- 資料存檔：瀏覽器無法直接寫檔，作答只保留在本次畫面中，可下載成 txt ----
+  function dataFileName() {
+    return state.idNumber !== '' ? `id_${state.idNumber}data.txt` : 'data.txt';
+  }
+
+  function dataText() {
+    return state.responses.map(([t, b, rt]) => `Trial ${t}: Rseponse ${b}  RT ${fmtRt(rt)}\n`).join('');
+  }
+
+  function fmtRt(rt) { return Number.isFinite(rt) ? `${Math.round(rt)} ms` : '-'; }
+
+  function downloadData() {
+    const blob = new Blob([dataText()], { type: 'text/plain;charset=utf-8' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = dataFileName();
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  }
+
+  // ---- 畫面更新 ----
+  function hasTrialShown() { return state.currentTrial > state.beginTrial; }
+  function isShowing() { return state.practice !== null || hasTrialShown(); }
+  function itemName() {
+    return state.practice ? PRACTICE[state.practice.index] : String(state.currentTrial);
+  }
+
+  function showCurrent() {
+    state.shownAt = performance.now();
+    updateImage();
+    playWavFile();
+    updateStatus();
+  }
+
+  function updateStatus() {
+    $('idLabel').textContent = state.idNumber || '（未設定）';
+    $('fileLabel').textContent = dataFileName();
+    $('countLabel').textContent = state.responses.length;
+    const practicing = state.practice !== null;
+    $('trialPrefix').textContent = practicing ? '練習題' : '題號';
+    $('trialLabel').textContent = isShowing() ? itemName() : '—';
+    $('endLabel').textContent = practicing ? PRACTICE[PRACTICE.length - 1] : END_TRIAL;
+    $('practiceBtn').textContent = practicing ? '結束練習' : '練習題';
+    $('practiceBtn').classList.toggle('active', practicing);
+    document.body.classList.toggle('practice', practicing);
+    const finished = isFinished();
+    $('nextBtn').disabled = !practicing && finished && state.currentTrial >= END_TRIAL;
+    $('scoreBtn').classList.toggle('remind', finished);
+    markPicked();
+  }
+
+  function isFinished() {
+    return state.responses.some(([t]) => t === END_TRIAL);
+  }
+
+  function showFinish() {
+    state.finishNotified = true;
+    $('finishLast').textContent = END_TRIAL;
+    $('finishDlg').showModal();
+  }
+
+  function markPicked() {
+    let last = null;
+    if (state.practice) last = state.practice.picks[itemName()] ?? null;
+    else for (const [t, b] of state.responses) if (t === state.currentTrial) last = b;
+    document.querySelectorAll('.choices button').forEach((btn) => {
+      btn.classList.toggle('picked', Number(btn.dataset.choice) === last);
+    });
+  }
+
+  function updateImage() {
+    if (!isShowing()) {
+      $('stage').hidden = true;
+      $('placeholder').innerHTML = placeholderHtml();
+      $('placeholder').hidden = false;
+      return;
+    }
+    
+    pic.dataset.triedPng = "false";
+    pic.src = `${PIC_DIR}/${itemName()}.jpg`;
+    $('placeholder').hidden = true;
+    $('stage').hidden = false;
+    
+    if (state.practice) {
+      if (state.practice.index < PRACTICE.length - 1) {
+        new Image().src = `${PIC_DIR}/${PRACTICE[state.practice.index + 1]}.jpg`;
+        new Image().src = `${PIC_DIR}/${PRACTICE[state.practice.index + 1]}.png`;
+      }
+    } else if (state.currentTrial < END_TRIAL) {
+      new Image().src = `${PIC_DIR}/${state.currentTrial + 1}.jpg`;
+      new Image().src = `${PIC_DIR}/${state.currentTrial + 1}.png`;
+    }
+  }
+
+  function playWavFile() {
+    if (!isShowing()) return;
+    $('audioNote').hidden = true;
+    player.pause();
+    player.src = `${WAV_DIR}/${itemName()}.wav`;
+    player.currentTime = 0;
+    player.play().catch((err) => console.warn('無法播放音檔：', err));
+  }
+
+  player.addEventListener('error', () => {
+    if (isShowing()) $('audioNote').hidden = false;
+  });
+
+  function showMessage(title, body, withSave = false) {
+    $('msgTitle').textContent = title;
+    $('msgBody').textContent = body;
+    $('msgSave').hidden = !withSave;
+    $('msgDlg').showModal();
+  }
+
+  function recordResponse(button) {
+    if (state.practice) {
+      state.practice.picks[itemName()] = button;
+      updateStatus();
+      return;
+    }
+    if (!hasTrialShown()) return;
+    const rt = state.shownAt !== null ? Math.round(performance.now() - state.shownAt) : null;
+    state.responses.push([state.currentTrial, button, rt]);
+    console.log(`Trial ${state.currentTrial}: Response ${button}, RT ${fmtRt(rt)}`);
+    updateStatus();
+    if (state.currentTrial === END_TRIAL && !state.finishNotified) {
+      setTimeout(showFinish, 300);
+    }
+  }
+
+  function previousClicked() {
+    if (state.practice) {
+      if (state.practice.index > 0) {
+        state.practice.index -= 1;
+        showCurrent();
+      } else {
+        showMessage('提醒', '已至練習題開始處!');
+      }
+      return;
+    }
+    if (state.currentTrial > state.beginTrial + 1) {
+      state.currentTrial -= 1;
+      showCurrent();
+    } else {
+      showMessage('提醒', '已至測驗開始處!');
+    }
+  }
+
+  function nextClicked() {
+    if (state.practice) {
+      if (state.practice.index < PRACTICE.length - 1) {
+        state.practice.index += 1;
+        showCurrent();
+      } else {
+        endPractice();
+        showMessage('練習結束', hasTrialShown()
+          ? '練習題已結束，回到正式測驗。'
+          : '練習題已結束，按「下一題」或「設定開始題號」開始正式測驗。');
+      }
+      return;
+    }
+    if ($('nextBtn').disabled) return;
+    if (state.currentTrial < END_TRIAL) {
+      state.currentTrial += 1;
+      showCurrent();
+    } else {
+      showMessage('結束', `測驗結束，請下載並檢視「${dataFileName()}」!`, true);
+    }
+  }
+
+  function startPractice() {
+    state.practice = { index: 0, picks: {} };
+    showCurrent();
+  }
+
+  function endPractice() {
+    state.practice = null;
+    player.pause();
+    $('audioNote').hidden = true;
+    updateImage();
+    updateStatus();
+  }
+
+  function openSetup() {
+    $('trialInput').value = '1';
+    $('idInput').value = state.idNumber;
+    $('setupError').textContent = '';
+    updateAnswerLabel();
+    $('setupDlg').showModal();
+    $('idInput').focus();
+  }
+
+  function applySetup(e) {
+    e.preventDefault();
+    const trialText = $('trialInput').value.trim();
+    const id = $('idInput').value.trim();
+    if (!/^\d+$/.test(trialText)) {
+      $('setupError').textContent = '請輸入有效的題號（數字）。';
+      return;
+    }
+    const n = parseInt(trialText, 10);
+    if (n < FIRST_TRIAL || n > END_TRIAL) {
+      $('setupError').textContent = `題號需介於 ${FIRST_TRIAL} ~ ${END_TRIAL}。`;
+      return;
+    }
+    state.practice = null;
+    state.idNumber = id;
+    state.beginTrial = n - 1;
+    state.currentTrial = n - 1;
+    state.responses = [];
+    state.shownAt = null;
+    state.finishNotified = false;
+    player.pause();
+    player.removeAttribute('src');
+    $('audioNote').hidden = true;
+
+    $('setupDlg').close();
+    console.log(`New session: start trial ${n}, Subject ${state.idNumber}`);
+    updateImage();
+    updateStatus();
+  }
+
+  const DEFAULT_ANSWER_FILE = 'answer.js';
+  const answerSrc = { name: DEFAULT_ANSWER_FILE, key: null };
+  let answerKey = null;
+  let scoreReport = '';
+
+  function parseAnswerCsv(text, name) {
+    const key = new Map();
+    text.replace(/^﻿/, '').split(/\r?\n/).forEach((line) => {
+      const [no, ans] = line.split(',').map((s) => (s || '').trim());
+      if (/^\d+$/.test(no) && /^[1-4]$/.test(ans)) key.set(Number(no), Number(ans));
+    });
+    if (!key.size) throw new Error(`「${name}」內沒有可用的答案（需為 no,answer 兩欄）。`);
+    return key;
+  }
+
+  function loadAnswerScript() {
+    return new Promise((resolve, reject) => {
+      delete window.ANSWER_CSV;
+      const old = document.getElementById('answerScript');
+      if (old) old.remove();
+      const sc = document.createElement('script');
+      sc.id = 'answerScript';
+      sc.src = `${DEFAULT_ANSWER_FILE}?t=${Date.now()}`;
+      sc.onload = () => (typeof window.ANSWER_CSV === 'string' ? resolve(window.ANSWER_CSV)
+        : reject(new Error(`「${DEFAULT_ANSWER_FILE}」格式不正確，需為 window.ANSWER_CSV = \`no,answer ...\`;`)));
+      sc.onerror = () => reject(new Error(`找不到「${DEFAULT_ANSWER_FILE}」，請確認它與 index.html 放在同一資料夾，\n或按「設定」→「選擇答案檔」手動載入。`));
+      document.head.appendChild(sc);
+    });
+  }
+
+  async function loadAnswerKey() {
+    if (answerSrc.key) return answerSrc.key;
+    return parseAnswerCsv(await loadAnswerScript(), DEFAULT_ANSWER_FILE);
+  }
+
+  function updateAnswerLabel() {
+    $('answerLabel').textContent = answerSrc.key
+      ? `${answerSrc.name}（已載入 ${answerSrc.key.size} 題）`
+      : `${DEFAULT_ANSWER_FILE}（預設）`;
+    $('answerReset').hidden = !answerSrc.key;
+  }
+
+  $('answerPick').addEventListener('click', () => {
+    $('answerFile').value = '';
+    $('answerFile').click();
+  });
+  $('answerFile').addEventListener('change', async () => {
+    const f = $('answerFile').files[0];
+    if (!f) return;
+    try {
+      answerSrc.key = parseAnswerCsv(await f.text(), f.name);
+      answerSrc.name = f.name;
+      $('setupError').textContent = '';
+    } catch (err) {
+      $('setupError').textContent = err.message;
+    }
+    updateAnswerLabel();
+  });
+  $('answerReset').addEventListener('click', () => {
+    answerSrc.key = null;
+    answerSrc.name = DEFAULT_ANSWER_FILE;
+    updateAnswerLabel();
+  });
+
+  async function openScore() {
+    try {
+      answerKey = await loadAnswerKey();
+    } catch (err) {
+      showMessage('無法對答案', err.message);
+      return;
+    }
+    showScore();
+  }
+
+  function computeScore() {
+    const last = new Map();
+    const lastRt = new Map();
+    for (const [t, b, rt] of state.responses) { last.set(t, b); lastRt.set(t, rt); }
+    const trials = [...last.keys()].sort((a, b) => a - b);
+
+    let correct = 0;
+    const rows = [], noKey = [], rts = [];
+    for (const t of trials) {
+      const resp = last.get(t);
+      if (!answerKey.has(t)) { noKey.push(t); continue; }
+      const ans = answerKey.get(t);
+      const ok = resp === ans;
+      if (ok) correct += 1;
+      const rt = lastRt.get(t);
+      if (Number.isFinite(rt)) rts.push(rt);
+      rows.push(`Trial ${String(t).padStart(3)}: 作答 ${resp}  正解 ${ans}  ${ok ? '○' : '×'}  RT ${fmtRt(rt).padStart(8)}`);
+    }
+    const total = rows.length;
+    const meanRt = rts.length ? rts.reduce((a, b) => a + b, 0) / rts.length : null;
+    return { correct, total, rows, noKey, meanRt, pct: total ? (correct / total) * 100 : null };
+  }
+
+  function showScore() {
+    const r = computeScore();
+    const summary = $('scoreSummary');
+    summary.innerHTML = '';
+    const big = document.createElement('div');
+    big.className = 'score-big';
+    big.textContent = r.pct === null ? '—' : `${r.pct.toFixed(1)}%`;
+    const sub = document.createElement('div');
+    sub.className = 'score-sub';
+    sub.textContent = `受試者 ID：${state.idNumber || '（未設定）'} 答對 ${r.correct} / 作答 ${r.total} 題 平均反應時間 ${fmtRt(r.meanRt)}`;
+    summary.append(big, sub);
+    if (r.noKey.length) {
+      const note = document.createElement('div');
+      note.className = 'score-note';
+      note.textContent = `另有 ${r.noKey.length} 題在「${answerSrc.name}」中沒有正解，未列入計算（題號：${r.noKey.join('、')}）。`;
+      summary.append(note);
+    }
+
+    scoreReport =
+      `受試者 ID: ${state.idNumber || '(未設定)'}\n答案檔: ${answerSrc.name}\n` +
+      `答對: ${r.correct}\n作答題數: ${r.total}\n` +
+      `正確率: ${r.pct === null ? '-' : r.pct.toFixed(1) + '%'}\n` +
+      `平均反應時間: ${fmtRt(r.meanRt)}\n` +
+      (r.noKey.length ? `無正解未計分題號: ${r.noKey.join(', ')}\n` : '') +
+      `\n` + r.rows.join('\n') + '\n';
+    $('scoreText').value = r.rows.length ? r.rows.join('\n') : '（尚無可計分的作答）';
+    if (!$('scoreDlg').open) $('scoreDlg').showModal();
+  }
+
+  function downloadScore() {
+    const blob = new Blob(['﻿' + scoreReport], { type: 'text/plain;charset=utf-8' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = state.idNumber !== '' ? `id_${state.idNumber}score.txt` : 'score.txt';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  }
+
+  function openLog() {
+    $('logText').value = dataText() || '（尚無紀錄）';
+    $('logDlg').showModal();
+  }
+
+  document.querySelectorAll('.choices button').forEach((btn) => {
+    btn.addEventListener('click', () => recordResponse(Number(btn.dataset.choice)));
+  });
+  pic.addEventListener('error', () => {
+    if (pic.dataset.triedPng !== "true") {
+      pic.dataset.triedPng = "true";
+      pic.src = `${PIC_DIR}/${itemName()}.png`;
+    } else {
+      $('stage').hidden = true;
+      $('placeholder').hidden = false;
+      $('placeholder').textContent = `找不到圖片：${PIC_DIR}/${itemName()}.jpg 或 .png`;
+    }
+  });
+
+  $('finishOk').addEventListener('click', () => $('finishDlg').close());
+  $('finishScore').addEventListener('click', () => { $('finishDlg').close(); openScore(); });
+  $('prevBtn').addEventListener('click', previousClicked);
+  $('nextBtn').addEventListener('click', nextClicked);
+  $('listenBtn').addEventListener('click', playWavFile);
+  $('setupBtn').addEventListener('click', openSetup);
+  $('practiceBtn').addEventListener('click', () => (state.practice ? endPractice() : startPractice()));
+  $('setupForm').addEventListener('submit', applySetup);
+  $('setupCancel').addEventListener('click', () => $('setupDlg').close());
+  $('msgOk').addEventListener('click', () => $('msgDlg').close());
+  $('msgSave').addEventListener('click', downloadData);
+  $('logBtn').addEventListener('click', openLog);
+  $('scoreBtn').addEventListener('click', openScore);
+  $('scoreClose').addEventListener('click', () => $('scoreDlg').close());
+  $('scoreSave').addEventListener('click', downloadScore);
+  $('logSave').addEventListener('click', downloadData);
+  $('logClose').addEventListener('click', () => $('logDlg').close());
+  $('logClear').addEventListener('click', () => {
+    if (!confirm(`確定要清除「${dataFileName()}」的所有紀錄？`)) return;
+    state.responses = [];
+    state.finishNotified = false;
+    updateStatus();
+    $('logText').value = '（尚無紀錄）';
+  });
+
+  document.addEventListener('keydown', (e) => {
+    if (document.querySelector('dialog[open]')) return;
+    if (['1', '2', '3', '4'].includes(e.key)) recordResponse(Number(e.key));
+    else if (e.key === 'ArrowRight') nextClicked();
+    else if (e.key === 'ArrowLeft') previousClicked();
+    else if (e.key === ' ') { e.preventDefault(); playWavFile(); }
+  });
+
+  state.responses = [];
+  try {
+    Object.keys(localStorage).filter((k) => k.startsWith('peabody:')).forEach((k) => localStorage.removeItem(k));
+  } catch (e) {}
+  updateImage();
+  updateStatus();
+</script>
+</body>
+</html>
