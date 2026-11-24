@@ -273,18 +273,21 @@
   <textarea id="scoreText" readonly></textarea>
   <div class="actions">
     <button type="button" id="scoreSave">下載正確率報表</button>
-    <button type="button" class="primary" id="scoreClose">關閉</button>
+    <button type="button" id="scoreClose">關閉</button>
   </div>
 </dialog>
 
 <script>
-  // ---- 設定（與 pbtest.py 相同） ----
-  const PIC_DIR = 'pic';
-  const WAV_DIR = 'wav';
+  // ---- 設定（檔案皆放在根目錄，留空代表與 index.html 同一層） ----
+  const PIC_DIR = '';
+  const WAV_DIR = '';
+  const picUrl = (name, ext) => (PIC_DIR ? `${PIC_DIR}/${name}.${ext}` : `${name}.${ext}`);
+  const wavUrl = (name) => (WAV_DIR ? `${WAV_DIR}/${name}.wav` : `${name}.wav`);
+
   const DEFAULT_BEGIN = 0;    // 預設 begin_trial，按「下一題」後從第 1 題開始
   const FIRST_TRIAL = 1;      // 題目圖片 1 ~ 36（.jpg 或 .png）
   const END_TRIAL = 36;       // 最後一題：作答此題後跳出完成提醒並停用「下一題」（已改為 36 題）
-  const PRACTICE = ['Q1', 'Q2', 'Q3'];  // 練習題：pea_pic/Q1.jpg、pea_wav/Q1.wav …
+  const PRACTICE = ['Q1', 'Q2', 'Q3'];  // 練習題：Q1.jpg、Q1.wav …
 
   const state = {
     beginTrial: DEFAULT_BEGIN,
@@ -390,18 +393,18 @@
     }
     
     pic.dataset.triedPng = "false";
-    pic.src = `${PIC_DIR}/${itemName()}.jpg`;
+    pic.src = picUrl(itemName(), 'jpg');
     $('placeholder').hidden = true;
     $('stage').hidden = false;
     
     if (state.practice) {
       if (state.practice.index < PRACTICE.length - 1) {
-        new Image().src = `${PIC_DIR}/${PRACTICE[state.practice.index + 1]}.jpg`;
-        new Image().src = `${PIC_DIR}/${PRACTICE[state.practice.index + 1]}.png`;
+        new Image().src = picUrl(PRACTICE[state.practice.index + 1], 'jpg');
+        new Image().src = picUrl(PRACTICE[state.practice.index + 1], 'png');
       }
     } else if (state.currentTrial < END_TRIAL) {
-      new Image().src = `${PIC_DIR}/${state.currentTrial + 1}.jpg`;
-      new Image().src = `${PIC_DIR}/${state.currentTrial + 1}.png`;
+      new Image().src = picUrl(state.currentTrial + 1, 'jpg');
+      new Image().src = picUrl(state.currentTrial + 1, 'png');
     }
   }
 
@@ -409,7 +412,7 @@
     if (!isShowing()) return;
     $('audioNote').hidden = true;
     player.pause();
-    player.src = `${WAV_DIR}/${itemName()}.wav`;
+    player.src = wavUrl(itemName());
     player.currentTime = 0;
     player.play().catch((err) => console.warn('無法播放音檔：', err));
   }
@@ -681,11 +684,11 @@
   pic.addEventListener('error', () => {
     if (pic.dataset.triedPng !== "true") {
       pic.dataset.triedPng = "true";
-      pic.src = `${PIC_DIR}/${itemName()}.png`;
+      pic.src = picUrl(itemName(), 'png');
     } else {
       $('stage').hidden = true;
       $('placeholder').hidden = false;
-      $('placeholder').textContent = `找不到圖片：${PIC_DIR}/${itemName()}.jpg 或 .png`;
+      $('placeholder').textContent = `找不到圖片：${picUrl(itemName(), 'jpg')} 或 .png`;
     }
   });
 
